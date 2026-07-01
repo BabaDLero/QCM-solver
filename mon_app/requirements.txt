@@ -1,0 +1,7 @@
+requests
+pillow
+mss
+pynput
+pystray
+pywin32
+python-dotenv

@@ -1,0 +1,227 @@
+================================================================================
+         GUIDE PAS-À-PAS : APPLICATION DE SCRAP D'ÉCRAN + API OPCODE
+================================================================================
+
+Objectif : Créer une application qui :
+  - Capture l’écran en temps réel (ou à la demande)
+  - Lors d’une touche pressée, envoie la capture à l’API OpenCode (Deepseek v4 flash free)
+  - Affiche la réponse (ex : solution d’un QCM) dans une petite fenêtre noire en bas à gauche
+  - Ne s’affiche pas dans la barre des tâches (visible uniquement dans la zone de notification / icônes cachées)
+  - Se lance en arrière‑plan avec une icône dans la barre d’état système (tray)
+
+-------------------------------------------------------------------------------
+1. PRÉREQUIS & CHOIX TECHNOLOGIQUES
+-------------------------------------------------------------------------------
+- Langage : Python 3.9+ (facile pour le prototypage et les bibliothèques)
+- Modules principaux :
+    • requests        → appels API
+    • pillow (PIL)    → traitement d’images
+    • mss             → capture d’écran rapide (ou pyautogui)
+    • pynput          → détection des touches globales (ou keyboard)
+    • tkinter         → fenêtre d’affichage (léger, intégré)
+    • pystray         → icône dans la zone de notification
+    • pywin32 (sous Windows) ou xlib (Linux) → gestion des fenêtres (masquage barre des tâches)
+- Plateforme : Windows (principalement), mais adaptable à macOS/Linux.
+- API OpenCode : vous devez posséder une clé API et connaître l’endpoint pour Deepseek v4.
+
+-------------------------------------------------------------------------------
+2. STRUCTURE DU PROJET
+-------------------------------------------------------------------------------
+Créer un dossier avec les fichiers suivants :
+
+mon_app/
+├── main.py                  # point d’entrée
+├── screen_capture.py        # fonctions de capture
+├── api_client.py            # appel à OpenCode
+├── overlay.py               # gestion de la fenêtre noire en bas à gauche
+├── tray.py                  # icône système et gestion de la sortie
+├── config.py                # clé API, touches, paramètres
+├── requirements.txt         # dépendances
+└── README.md                # instructions
+
+-------------------------------------------------------------------------------
+3. INSTALLATION DES DÉPENDANCES
+-------------------------------------------------------------------------------
+Créer un fichier requirements.txt avec :
+
+requests
+pillow
+mss
+pynput
+pystray
+pywin32    # seulement sous Windows
+
+Puis installer :
+    pip install -r requirements.txt
+
+-------------------------------------------------------------------------------
+4. CAPTURE D’ÉCRAN (screen_capture.py)
+-------------------------------------------------------------------------------
+- Utiliser `mss` pour capturer tout l’écran rapidement.
+- Fonction `grab_screenshot()` retournant une image PIL ou des bytes.
+
+Exemple :
+    import mss
+    import mss.tools
+
+    def grab_screenshot():
+        with mss.mss() as sct:
+            monitor = sct.monitors[1]   # écran principal
+            screenshot = sct.grab(monitor)
+            # Convertir en bytes (PNG) pour l’API
+            return mss.tools.to_png(screenshot.rgb, screenshot.size)
+
+- On pourra aussi redimensionner l’image pour réduire le temps d’envoi (optionnel).
+
+-------------------------------------------------------------------------------
+5. CLIENT API (api_client.py)
+-------------------------------------------------------------------------------
+- Utiliser `requests` pour envoyer la capture à OpenCode.
+- L’API OpenCode doit accepter une image (multipart/form-data) et un prompt.
+- Pour Deepseek v4 (flash free), vous devez connaître le modèle exact (ex: "deepseek-v4-flash-free").
+- Endpoint exemple : https://api.opencode.com/v1/chat/completions (à adapter selon votre fournisseur).
+- Inclure votre clé API dans l’en-tête `Authorization: Bearer VOTRE_CLE`.
+
+Fonction :
+    def ask_deepseek(image_bytes, prompt="Réponds à la question affichée à l'écran"):
+        url = "..."   # à remplir
+        headers = {"Authorization": f"Bearer {API_KEY}"}
+        files = {"image": ("screenshot.png", image_bytes, "image/png")}
+        data = {"model": "deepseek-v4-flash-free", "prompt": prompt}
+        response = requests.post(url, headers=headers, files=files, data=data)
+        return response.json()  # ou response.text selon le format
+
+- Gérer les erreurs (timeout, clé invalide, etc.) et afficher un message d’erreur dans l’overlay.
+
+-------------------------------------------------------------------------------
+6. DÉTECTION DES TOUCHES (pynput)
+-------------------------------------------------------------------------------
+- Utiliser `pynput.keyboard.Listener` pour écouter une combinaison de touches (ex: Ctrl+Shift+Q ou une touche comme F12).
+- Ne pas bloquer le thread principal ; utiliser un thread séparé.
+- Quand la touche est pressée, déclencher la capture + appel API + affichage.
+
+Exemple :
+    from pynput import keyboard
+
+    def on_press(key):
+        if key == keyboard.Key.f12:   # ou combinaison
+            handle_request()
+
+    listener = keyboard.Listener(on_press=on_press)
+    listener.start()
+
+- Assurez-vous que l’écoute globale est autorisée (admin sous Windows pour certaines touches).
+
+-------------------------------------------------------------------------------
+7. FENÊTRE D’AFFICHAGE (overlay.py)
+-------------------------------------------------------------------------------
+- Créer une fenêtre Tkinter :
+    • `overrideredirect(True)` pour enlever la bordure.
+    • `attributes('-topmost', True)` pour rester au‑dessus des autres fenêtres.
+    • `attributes('-alpha', 0.9)` pour un fond légèrement transparent (facultatif).
+    • `geometry('+0+{screen_height-200}')` pour la placer en bas à gauche (largeur fixe 300, hauteur 150).
+    • `configure(bg='black')` pour un fond noir.
+    • Ajouter un widget `Label` ou `Text` pour afficher la réponse (texte blanc).
+- Pour éviter l’apparition dans la barre des tâches sous Windows :
+    • Utiliser `hwnd = frame.winfo_id()` et `ctypes.windll.user32.SetWindowLongW(hwnd, -20, ...)`.
+    • Ou utiliser `pywin32` pour définir `WS_EX_TOOLWINDOW`.
+- La fenêtre doit être affichée/masquée lors des requêtes : on peut la rendre visible seulement après la réponse, puis la cacher après un délai (ex: 5 secondes) ou attendre une nouvelle action.
+- Prévoir un mécanisme pour que l’utilisateur puisse fermer l’application via l’icône tray.
+
+-------------------------------------------------------------------------------
+8. ICÔNE SYSTÈME ET MASQUAGE DE L’APPLICATION (tray.py)
+-------------------------------------------------------------------------------
+- Utiliser `pystray` pour créer une icône dans la zone de notification.
+- L’icône peut être un fichier .ico ou une image PIL.
+- Ajouter un menu : "Quitter" pour arrêter l’application.
+- L’application principale ne doit pas avoir de fenêtre visible (sauf l’overlay).
+- Ne pas afficher de console (si vous utilisez Python, compilez en .exe avec `pyinstaller --noconsole`).
+
+Exemple de configuration pystray :
+    icon = pystray.Icon("MonApp", icon_image, "Mon App", menu)
+    icon.run()
+
+- Lancer l’icône dans un thread séparé, tout en gardant le listener de touches actif.
+
+-------------------------------------------------------------------------------
+9. INTÉGRATION GLOBALE (main.py)
+-------------------------------------------------------------------------------
+- Initialiser les composants :
+    1. Démarrer l’écouteur de touches.
+    2. Démarrer l’icône de tray (bloquant, donc le lancer dans un thread).
+    3. Créer la fenêtre overlay (mais la maintenir cachée initialement).
+- Boucle principale : `tkinter.mainloop()` pour gérer les événements de l’overlay, ou utiliser `threading` pour ne pas bloquer.
+
+-------------------------------------------------------------------------------
+10. GESTION DES ERREURS & LOGS
+-------------------------------------------------------------------------------
+- Journaliser dans un fichier `app.log` pour déboguer (car l’app est silencieuse).
+- Si l’API échoue, afficher un message d’erreur dans l’overlay (ex: "Erreur API" en rouge).
+- Gérer les exceptions lors de la capture (écran verrouillé, etc.).
+
+-------------------------------------------------------------------------------
+11. TESTS & DÉPLOIEMENT
+-------------------------------------------------------------------------------
+- Tester sur votre machine : lancer `python main.py`.
+- Vérifier que l’icône apparaît dans la zone de notification, que la touche déclenche bien la capture et l’affichage.
+- Si tout est OK, empaqueter avec PyInstaller :
+      pyinstaller --noconsole --onefile --icon=app.ico main.py
+- Le fichier .exe généré pourra être exécuté sans fenêtre de console.
+
+-------------------------------------------------------------------------------
+12. RÉGLAGES SPÉCIFIQUES À VOTRE API OPCODE
+-------------------------------------------------------------------------------
+- Consultez la documentation OpenCode pour :
+    • Le nom exact du modèle ("deepseek-v4-flash-free").
+    • Le format d’envoi de l’image (base64 ou multipart).
+    • La structure de la réponse (extrayez le texte de la réponse).
+- Si l’API ne prend pas d’image directement, vous pouvez en extraire le texte via OCR (Tesseract) avant d’envoyer, mais cela alourdit le processus. L’idéal est que le modèle soit multimodal.
+
+-------------------------------------------------------------------------------
+13. AMÉLIORATIONS POSSIBLES
+-------------------------------------------------------------------------------
+- Ajouter un minuteur pour effacer automatiquement la réponse après quelques secondes.
+- Permettre de changer la touche de déclenchement via un fichier de configuration.
+- Prendre en charge plusieurs écrans.
+- Ajouter un mode "copier la réponse dans le presse-papiers".
+
+-------------------------------------------------------------------------------
+14. NOTES DE SÉCURITÉ
+-------------------------------------------------------------------------------
+- Ne jamais versionner votre clé API ; utilisez une variable d’environnement ou un fichier `.env`.
+- Limiter les appels pour ne pas dépasser les quotas de l’API gratuite.
+
+-------------------------------------------------------------------------------
+15. EXEMPLE D’ARCHITECTURE DE CODE (SCHÉMA)
+-------------------------------------------------------------------------------
+    main.py
+       ├── config.py (charge API_KEY, TOUCHE, etc.)
+       ├── tray.py (lance l’icône système)
+       ├── keyboard_listener (thread)
+       │   └── on_press → appelle handle_request()
+       ├── overlay.py (instance Tk, méthodes show_text(text), hide())
+       └── handle_request():
+             1. capture = screen_capture.grab_screenshot()
+             2. réponse = api_client.ask_deepseek(capture)
+             3. overlay.show_text(réponse)
+             4. après X secondes : overlay.hide()
+
+-------------------------------------------------------------------------------
+16. RESSOURCES UTILES
+-------------------------------------------------------------------------------
+- Documentation pynput : https://pynput.readthedocs.io/
+- Documentation pystray : https://pystray.readthedocs.io/
+- Exemples pour cacher la barre des tâches :
+    https://stackoverflow.com/questions/4050842/python-tkinter-window-not-showing-in-taskbar
+- API OpenCode : (consulter votre portail développeur)
+
+-------------------------------------------------------------------------------
+CONCLUSION
+-------------------------------------------------------------------------------
+En suivant ces étapes, une IA (ou un développeur) pourra construire l’application
+entièrement fonctionnelle. Chaque module est indépendant et peut être codé
+séquentiellement. Le résultat final sera une application légère, discrète,
+et réactive, prête à répondre à toutes vos questions QCM en un clin d’œil.
+
+Bonne réalisation !
+================================================================================

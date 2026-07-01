@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.env
+app.log
+dist/
+build/
+*.spec
+tessdata/
