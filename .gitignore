@@ -6,3 +6,5 @@ dist/
 build/
 *.spec
 tessdata/
+
+deepseek_txt_*.txt
