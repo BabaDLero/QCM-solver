@@ -40,7 +40,7 @@ class Overlay:
         self._visible = False
 
         self._queue = queue.Queue()
-        self._poll_queue()
+        self.root.bind("<<ProcessQueue>>", self._process_queue)
 
     def _hide_from_taskbar(self):
         try:
@@ -52,7 +52,7 @@ class Overlay:
         except Exception as e:
             logger.warning(f"Could not hide from taskbar: {e}")
 
-    def _poll_queue(self):
+    def _process_queue(self, event=None):
         try:
             while True:
                 msg = self._queue.get_nowait()
@@ -63,13 +63,14 @@ class Overlay:
                     self.hide()
         except queue.Empty:
             pass
-        self.root.after(100, self._poll_queue)
 
     def request_show(self, text, color="#888888"):
         self._queue.put(("show", text, color))
+        self.root.event_generate("<<ProcessQueue>>", when="tail")
 
     def request_hide(self):
         self._queue.put(("hide",))
+        self.root.event_generate("<<ProcessQueue>>", when="tail")
 
     def show_text(self, text, color="#888888"):
         if self._auto_hide_id:
