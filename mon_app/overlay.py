@@ -47,6 +47,9 @@ class Overlay:
         except Exception as e:
             logger.warning(f"Could not hide from taskbar: {e}")
 
+    def show_text_safe(self, text, color="#1a1a1a"):
+        self.root.after(0, lambda: self.show_text(text, color))
+
     def show_text(self, text, color="#1a1a1a"):
         if self._auto_hide_id:
             self.root.after_cancel(self._auto_hide_id)
@@ -58,6 +61,9 @@ class Overlay:
         self._auto_hide_id = self.root.after(
             config.AUTO_HIDE_SECONDS * 1000, self.hide
         )
+
+    def hide_safe(self):
+        self.root.after(0, self.hide)
 
     def hide(self):
         self.root.withdraw()
