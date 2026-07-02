@@ -10,7 +10,7 @@ load_dotenv(os.path.join(_base_dir, '.env'))
 
 API_KEY = os.getenv("OPCODE_API_KEY", "")
 API_URL = os.getenv("OPCODE_API_URL", "https://opencode.ai/zen/go/v1/chat/completions")
-MODEL = "deepseek-v4-flash"
+MODEL = os.getenv("OPCODE_MODEL", "minimax")
 TRIGGER_KEY = "*"
 OVERLAY_WIDTH = 400
 OVERLAY_HEIGHT = 200
