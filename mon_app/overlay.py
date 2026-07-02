@@ -52,8 +52,12 @@ class Overlay:
             self.root.after_cancel(self._auto_hide_id)
             self._auto_hide_id = None
         self.label.config(text=text, fg=color)
+        self.root.update_idletasks()
         self.root.deiconify()
         self.root.lift()
+        self._auto_hide_id = self.root.after(
+            config.AUTO_HIDE_SECONDS * 1000, self.hide
+        )
 
     def hide(self):
         self.root.withdraw()

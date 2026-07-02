@@ -1,25 +1,53 @@
-import requests
-import config
+import os
+import sys
 import logging
 
+import requests
+import pytesseract
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+import config
+
 logger = logging.getLogger(__name__)
+
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+if getattr(sys, 'frozen', False):
+    _base = sys._MEIPASS
+else:
+    _base = os.path.dirname(__file__)
+os.environ["TESSDATA_PREFIX"] = os.path.join(_base, "tessdata")
+
+_retry_strategy = Retry(
+    total=0,
+    status_forcelist=[429, 500, 502, 503, 504],
+    backoff_factor=0.3,
+)
+_adapter = HTTPAdapter(
+    pool_connections=4,
+    pool_maxsize=8,
+    max_retries=_retry_strategy,
+)
+_session = requests.Session()
+_session.mount("https://", _adapter)
+_session.headers.update({
+    "Authorization": f"Bearer {config.API_KEY}",
+    "Content-Type": "application/json",
+    "Accept-Encoding": "gzip, deflate",
+})
+
+try:
+    _empty = pytesseract.image_to_string(
+        pytesseract.pytesseract.tesseract_cmd, lang="fra"
+    )
+except Exception:
+    pass
 
 
 def ask_deepseek(img):
     if not config.API_KEY:
         return "Erreur : clé API non définie. Définissez OPCODE_API_KEY dans .env"
-
-    import pytesseract
-    import os
-    import sys
-
-    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-
-    if getattr(sys, 'frozen', False):
-        base = sys._MEIPASS
-    else:
-        base = os.path.dirname(__file__)
-    os.environ["TESSDATA_PREFIX"] = os.path.join(base, "tessdata")
 
     try:
         text = pytesseract.image_to_string(img, lang="fra")
@@ -29,18 +57,12 @@ def ask_deepseek(img):
         logger.error(f"OCR error: {e}")
         return f"Erreur OCR : {e}"
 
-    url = config.API_URL
-    headers = {
-        "Authorization": f"Bearer {config.API_KEY}",
-        "Content-Type": "application/json",
-    }
-
     prompt = (
         "Analyse le texte extrait d'une capture d'écran ci-dessous.\n"
-        "Si c'est un QCM (questions à choix multiples), réponds UNIQUEMENT par "
-        "le numéro ou la lettre de la bonne réponse, rien d'autre.\n"
-        "Si c'est une question ouverte, réponds de façon très courte et concise "
-        "(1 phrase maximum).\n\n"
+        "Si c'est un QCM, réponds UNIQUEMENT par le numéro ou la lettre "
+        "de la bonne réponse, rien d'autre.\n"
+        "Si c'est une question ouverte, réponds de façon très courte et "
+        "concise (1 phrase maximum).\n\n"
         f"Texte :\n{text}"
     )
 
@@ -49,10 +71,15 @@ def ask_deepseek(img):
         "messages": [
             {"role": "user", "content": prompt}
         ],
+        "max_tokens": config.API_MAX_TOKENS,
     }
 
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=120)
+        response = _session.post(
+            config.API_URL,
+            json=payload,
+            timeout=config.API_TIMEOUT,
+        )
         response.raise_for_status()
         result = response.json()
         return result.get("choices", [{}])[0].get("message", {}).get("content", str(result))

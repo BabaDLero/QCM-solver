@@ -1,6 +1,7 @@
 import threading
 import logging
 import sys
+import time
 
 from pynput import keyboard
 
@@ -18,6 +19,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 overlay = None
+_last_trigger = 0
 
 
 def handle_request():
@@ -34,6 +36,7 @@ def handle_request():
 
 
 def on_press(key):
+    global _last_trigger
     try:
         trigger = config.TRIGGER_KEY
         is_match = False
@@ -45,6 +48,11 @@ def on_press(key):
                 is_match = True
 
         if is_match:
+            now = time.monotonic()
+            if now - _last_trigger < config.DEBOUNCE_SECONDS:
+                return
+            _last_trigger = now
+
             if overlay.is_visible:
                 overlay.hide()
             else:
