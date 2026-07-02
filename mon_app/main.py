@@ -32,7 +32,7 @@ def handle_request():
         _busy = True
 
     try:
-        overlay.show_text_safe("Analyse en cours...", color="#888888")
+        overlay.show_text_safe("Analyse en cours...")
         logger.info("Trigger pressed — capturing screen")
         img = screen_capture.grab_screenshot()
         logger.info("Screenshot captured, calling API")
@@ -41,7 +41,7 @@ def handle_request():
         overlay.show_text_safe(response)
     except Exception as e:
         logger.error(f"Error in handle_request: {e}")
-        overlay.show_text_safe(f"Erreur : {e}", color="red")
+        overlay.show_text_safe(f"Erreur : {e}", color="#cc0000")
     finally:
         with _busy_lock:
             _busy = False
