@@ -36,6 +36,13 @@ class Overlay:
         self._hide_from_taskbar()
         self.root.withdraw()
         self._auto_hide_id = None
+        self._visible = False
+
+        self._pending_text = ""
+        self._pending_color = "#1a1a1a"
+
+        self.root.bind("<<ShowText>>", self._on_show_text)
+        self.root.bind("<<Hide>>", self._on_hide)
 
     def _hide_from_taskbar(self):
         try:
@@ -47,31 +54,40 @@ class Overlay:
         except Exception as e:
             logger.warning(f"Could not hide from taskbar: {e}")
 
+    def _on_show_text(self, event):
+        self.show_text(self._pending_text, self._pending_color)
+
+    def _on_hide(self, event):
+        self.hide()
+
     def show_text_safe(self, text, color="#1a1a1a"):
-        self.root.after(0, lambda: self.show_text(text, color))
+        self._pending_text = text
+        self._pending_color = color
+        self.root.event_generate("<<ShowText>>", when="tail")
 
     def show_text(self, text, color="#1a1a1a"):
         if self._auto_hide_id:
             self.root.after_cancel(self._auto_hide_id)
             self._auto_hide_id = None
         self.label.config(text=text, fg=color)
-        self.root.update_idletasks()
         self.root.deiconify()
         self.root.lift()
+        self._visible = True
         self._auto_hide_id = self.root.after(
             config.AUTO_HIDE_SECONDS * 1000, self.hide
         )
 
     def hide_safe(self):
-        self.root.after(0, self.hide)
+        self.root.event_generate("<<Hide>>", when="tail")
 
     def hide(self):
         self.root.withdraw()
         self._auto_hide_id = None
+        self._visible = False
 
     @property
     def is_visible(self):
-        return self.root.winfo_viewable()
+        return self._visible if hasattr(self, '_visible') else False
 
     def run(self):
         self.root.mainloop()
