@@ -73,6 +73,7 @@ def ask_deepseek(img):
             {"role": "user", "content": prompt}
         ],
         "max_tokens": config.API_MAX_TOKENS,
+        "enable_thinking": False,
     }
 
     try:
