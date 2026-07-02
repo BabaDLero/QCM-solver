@@ -32,16 +32,16 @@ def handle_request():
         _busy = True
 
     try:
-        overlay.show_text_safe("Analyse en cours...")
+        overlay.request_show("Analyse en cours...")
         logger.info("Trigger pressed — capturing screen")
         img = screen_capture.grab_screenshot()
         logger.info("Screenshot captured, calling API")
         response = api_client.ask_deepseek(img)
         logger.info(f"API response received: {response[:100] if response else 'empty'}")
-        overlay.show_text_safe(response)
+        overlay.request_show(response)
     except Exception as e:
         logger.error(f"Error in handle_request: {e}")
-        overlay.show_text_safe(f"Erreur : {e}", color="#cc0000")
+        overlay.request_show(f"Erreur : {e}", color="#cc0000")
     finally:
         with _busy_lock:
             _busy = False
@@ -69,7 +69,7 @@ def on_press(key):
                 return
 
             if overlay.is_visible:
-                overlay.hide_safe()
+                overlay.request_hide()
 
             threading.Thread(target=handle_request, daemon=True).start()
     except AttributeError:

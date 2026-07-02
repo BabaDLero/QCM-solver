@@ -1,3 +1,4 @@
+import queue
 import tkinter as tk
 import ctypes
 import config
@@ -22,7 +23,7 @@ class Overlay:
         self.label = tk.Label(
             self.root,
             text="",
-            fg="#1a1a1a",
+            fg="#888888",
             bg="#f0f0f0",
             wraplength=config.OVERLAY_WIDTH - 20,
             font=("Consolas", 12, "bold"),
@@ -38,11 +39,8 @@ class Overlay:
         self._auto_hide_id = None
         self._visible = False
 
-        self._pending_text = ""
-        self._pending_color = "#1a1a1a"
-
-        self.root.bind("<<ShowText>>", self._on_show_text)
-        self.root.bind("<<Hide>>", self._on_hide)
+        self._queue = queue.Queue()
+        self._poll_queue()
 
     def _hide_from_taskbar(self):
         try:
@@ -54,16 +52,24 @@ class Overlay:
         except Exception as e:
             logger.warning(f"Could not hide from taskbar: {e}")
 
-    def _on_show_text(self, event):
-        self.show_text(self._pending_text, self._pending_color)
+    def _poll_queue(self):
+        try:
+            while True:
+                msg = self._queue.get_nowait()
+                action = msg[0]
+                if action == "show":
+                    self.show_text(msg[1], msg[2])
+                elif action == "hide":
+                    self.hide()
+        except queue.Empty:
+            pass
+        self.root.after(100, self._poll_queue)
 
-    def _on_hide(self, event):
-        self.hide()
+    def request_show(self, text, color="#888888"):
+        self._queue.put(("show", text, color))
 
-    def show_text_safe(self, text, color="#1a1a1a"):
-        self._pending_text = text
-        self._pending_color = color
-        self.root.event_generate("<<ShowText>>", when="tail")
+    def request_hide(self):
+        self._queue.put(("hide",))
 
     def show_text(self, text, color="#888888"):
         if self._auto_hide_id:
@@ -78,17 +84,16 @@ class Overlay:
             config.AUTO_HIDE_SECONDS * 1000, self.hide
         )
 
-    def hide_safe(self):
-        self.root.event_generate("<<Hide>>", when="tail")
-
     def hide(self):
         self.root.withdraw()
-        self._auto_hide_id = None
+        if self._auto_hide_id:
+            self.root.after_cancel(self._auto_hide_id)
+            self._auto_hide_id = None
         self._visible = False
 
     @property
     def is_visible(self):
-        return self._visible if hasattr(self, '_visible') else False
+        return self._visible
 
     def run(self):
         self.root.mainloop()
