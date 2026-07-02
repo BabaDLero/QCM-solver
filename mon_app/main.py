@@ -20,11 +20,20 @@ logger = logging.getLogger(__name__)
 
 overlay = None
 _last_trigger = 0
+_busy_lock = threading.Lock()
+_busy = False
 
 
 def handle_request():
-    logger.info("Trigger pressed — capturing screen")
+    global _busy
+    with _busy_lock:
+        if _busy:
+            return
+        _busy = True
+
     try:
+        overlay.show_text("Analyse en cours...", color="#888888")
+        logger.info("Trigger pressed — capturing screen")
         img = screen_capture.grab_screenshot()
         logger.info("Screenshot captured, calling API")
         response = api_client.ask_deepseek(img)
@@ -33,6 +42,9 @@ def handle_request():
     except Exception as e:
         logger.error(f"Error in handle_request: {e}")
         overlay.show_text(f"Erreur : {e}", color="red")
+    finally:
+        with _busy_lock:
+            _busy = False
 
 
 def on_press(key):
@@ -53,10 +65,13 @@ def on_press(key):
                 return
             _last_trigger = now
 
+            if _busy:
+                return
+
             if overlay.is_visible:
                 overlay.hide()
-            else:
-                threading.Thread(target=handle_request, daemon=True).start()
+
+            threading.Thread(target=handle_request, daemon=True).start()
     except AttributeError:
         pass
 
