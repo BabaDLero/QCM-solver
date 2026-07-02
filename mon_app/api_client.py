@@ -84,10 +84,16 @@ def ask_deepseek(img):
         response.raise_for_status()
         result = response.json()
         logger.debug(f"API raw response: {response.text[:500]}")
-        content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+        message = result.get("choices", [{}])[0].get("message", {})
+        content = message.get("content", "")
         if not content:
-            logger.warning(f"Empty content in API response. Full result: {result}")
-            return f"Reponse API vide. Resultat brut: {str(result)[:200]}"
+            reasoning = message.get("reasoning_content", "")
+            if reasoning:
+                content = reasoning.strip().rsplit(".", 1)[0] + "."
+                logger.debug(f"Using reasoning_content fallback ({len(content)} chars)")
+            else:
+                logger.warning(f"Empty content in API response. Full result: {result}")
+                return f"Reponse API vide. Resultat brut: {str(result)[:200]}"
         return content
     except requests.exceptions.Timeout:
         logger.error("API timeout")
