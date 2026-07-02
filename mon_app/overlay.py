@@ -40,6 +40,7 @@ class Overlay:
 
         self._pending_capture = False
         self._pending_hide = False
+        self._busy = False
         self._capture_callback = capture_callback
 
         self._check_pending()
@@ -56,13 +57,15 @@ class Overlay:
 
     def _check_pending(self):
         try:
-            if self._pending_hide:
+            if self._pending_hide and not self._busy:
                 self._pending_hide = False
                 self.hide()
-            if self._pending_capture:
+            if self._pending_capture and not self._busy:
                 self._pending_capture = False
+                self._busy = True
                 if self._capture_callback:
                     self._capture_callback()
+                self._busy = False
         except Exception as e:
             logger.error(f"Error in _check_pending: {e}", exc_info=True)
         self.root.after(100, self._check_pending)
@@ -72,6 +75,10 @@ class Overlay:
 
     def request_hide(self):
         self._pending_hide = True
+
+    @property
+    def busy(self):
+        return self._busy
 
     def show_text(self, text, color="#888888"):
         if self._auto_hide_id:

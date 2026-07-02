@@ -12,10 +12,14 @@ from overlay import Overlay
 from tray import SystemTray
 
 logging.basicConfig(
-    filename=config.LOG_FILE,
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.FileHandler(config.LOG_FILE),
+        logging.StreamHandler(sys.stderr),
+    ],
 )
+logging.getLogger("PIL").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 overlay = None
@@ -23,17 +27,20 @@ _last_trigger = 0
 
 
 def handle_request():
+    logger.debug(">>> handle_request START")
     try:
         overlay.show_text("Analyse en cours...")
-        logger.info("Trigger pressed — capturing screen")
+        logger.debug("OCR + API starting")
         img = screen_capture.grab_screenshot()
-        logger.info("Screenshot captured, calling API")
+        logger.debug("Screenshot captured")
         response = api_client.ask_deepseek(img)
-        logger.info(f"API response received: {response[:100] if response else 'empty'}")
+        logger.debug(f"API response: {response[:80] if response else 'EMPTY'}")
         overlay.show_text(response)
+        logger.debug("Response displayed")
     except Exception as e:
-        logger.error(f"Error in handle_request: {e}")
+        logger.error(f"Error: {e}", exc_info=True)
         overlay.show_text(f"Erreur : {e}", color="#cc0000")
+    logger.debug("<<< handle_request END")
 
 
 def on_press(key):
@@ -51,15 +58,19 @@ def on_press(key):
         if is_match:
             now = time.monotonic()
             if now - _last_trigger < config.DEBOUNCE_SECONDS:
+                logger.debug(f"* ignored (debounce, {now - _last_trigger:.1f}s)")
                 return
             _last_trigger = now
 
-            if overlay._pending_capture:
+            if overlay.busy:
+                logger.debug("* ignored (busy)")
                 return
 
             if overlay.is_visible:
+                logger.debug("* overlay visible → request_hide")
                 overlay.request_hide()
 
+            logger.debug("* trigger accepted → request_capture")
             overlay.request_capture()
     except AttributeError:
         pass
