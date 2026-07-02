@@ -59,12 +59,12 @@ def ask_deepseek(img):
         return f"Erreur OCR : {e}"
 
     prompt = (
-        "Analyse le texte extrait d'une capture d'écran ci-dessous.\n"
-        "Si c'est un QCM, réponds UNIQUEMENT par le numéro ou la lettre "
-        "de la bonne réponse, rien d'autre.\n"
-        "Si c'est une question ouverte, réponds de façon très courte et "
-        "concise (1 phrase maximum).\n\n"
-        f"Texte :\n{text}"
+        "Reponds directement et uniquement a la question ci-dessous. "
+        "Ne donne aucune explication, aucun raisonnement, aucun commentaire. "
+        "Si c'est un QCM, reponds UNIQUEMENT par le numero ou la lettre "
+        "de la bonne reponse. "
+        "Si c'est une question ouverte, reponds en une phrase maximum. "
+        "Texte :\n" + text
     )
 
     payload = {
@@ -89,8 +89,9 @@ def ask_deepseek(img):
         if not content:
             reasoning = message.get("reasoning_content", "")
             if reasoning:
-                content = reasoning.strip().rsplit(".", 1)[0] + "."
-                logger.debug(f"Using reasoning_content fallback ({len(content)} chars)")
+                sentences = [s.strip() for s in reasoning.replace('\n', ' ').split('.') if s.strip()]
+                content = sentences[-1] if sentences else reasoning.strip()
+                logger.debug(f"Using reasoning fallback, last sentence: {content[:100]}")
             else:
                 logger.warning(f"Empty content in API response. Full result: {result}")
                 return f"Reponse API vide. Resultat brut: {str(result)[:200]}"
