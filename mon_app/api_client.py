@@ -32,7 +32,6 @@ _adapter = HTTPAdapter(
 _session = requests.Session()
 _session.mount("https://", _adapter)
 _session.headers.update({
-    "Authorization": f"Bearer {config.API_KEY}",
     "Content-Type": "application/json",
     "Accept-Encoding": "gzip, deflate",
 })
@@ -48,6 +47,8 @@ except Exception:
 def ask_deepseek(img):
     if not config.API_KEY:
         return "Erreur : clé API non définie. Définissez OPCODE_API_KEY dans .env"
+
+    _session.headers.update({"Authorization": f"Bearer {config.API_KEY}"})
 
     try:
         text = pytesseract.image_to_string(img, lang="fra")
