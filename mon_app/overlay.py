@@ -1,4 +1,3 @@
-import queue
 import tkinter as tk
 import ctypes
 import config
@@ -8,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 
 class Overlay:
-    def __init__(self):
+    def __init__(self, capture_callback=None):
         self.root = tk.Tk()
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
@@ -39,8 +38,11 @@ class Overlay:
         self._auto_hide_id = None
         self._visible = False
 
-        self._queue = queue.Queue()
-        self.root.bind("<<ProcessQueue>>", self._process_queue)
+        self._pending_capture = False
+        self._pending_hide = False
+        self._capture_callback = capture_callback
+
+        self._check_pending()
 
     def _hide_from_taskbar(self):
         try:
@@ -52,25 +54,24 @@ class Overlay:
         except Exception as e:
             logger.warning(f"Could not hide from taskbar: {e}")
 
-    def _process_queue(self, event=None):
+    def _check_pending(self):
         try:
-            while True:
-                msg = self._queue.get_nowait()
-                action = msg[0]
-                if action == "show":
-                    self.show_text(msg[1], msg[2])
-                elif action == "hide":
-                    self.hide()
-        except queue.Empty:
-            pass
+            if self._pending_hide:
+                self._pending_hide = False
+                self.hide()
+            if self._pending_capture:
+                self._pending_capture = False
+                if self._capture_callback:
+                    self._capture_callback()
+        except Exception as e:
+            logger.error(f"Error in _check_pending: {e}", exc_info=True)
+        self.root.after(100, self._check_pending)
 
-    def request_show(self, text, color="#888888"):
-        self._queue.put(("show", text, color))
-        self.root.event_generate("<<ProcessQueue>>", when="tail")
+    def request_capture(self):
+        self._pending_capture = True
 
     def request_hide(self):
-        self._queue.put(("hide",))
-        self.root.event_generate("<<ProcessQueue>>", when="tail")
+        self._pending_hide = True
 
     def show_text(self, text, color="#888888"):
         if self._auto_hide_id:

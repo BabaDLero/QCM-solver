@@ -1,7 +1,7 @@
-import threading
 import logging
 import sys
 import time
+import threading
 
 from pynput import keyboard
 
@@ -20,31 +20,20 @@ logger = logging.getLogger(__name__)
 
 overlay = None
 _last_trigger = 0
-_busy_lock = threading.Lock()
-_busy = False
 
 
 def handle_request():
-    global _busy
-    with _busy_lock:
-        if _busy:
-            return
-        _busy = True
-
     try:
-        overlay.request_show("Analyse en cours...")
+        overlay.show_text("Analyse en cours...")
         logger.info("Trigger pressed — capturing screen")
         img = screen_capture.grab_screenshot()
         logger.info("Screenshot captured, calling API")
         response = api_client.ask_deepseek(img)
         logger.info(f"API response received: {response[:100] if response else 'empty'}")
-        overlay.request_show(response)
+        overlay.show_text(response)
     except Exception as e:
         logger.error(f"Error in handle_request: {e}")
-        overlay.request_show(f"Erreur : {e}", color="#cc0000")
-    finally:
-        with _busy_lock:
-            _busy = False
+        overlay.show_text(f"Erreur : {e}", color="#cc0000")
 
 
 def on_press(key):
@@ -65,13 +54,13 @@ def on_press(key):
                 return
             _last_trigger = now
 
-            if _busy:
+            if overlay._pending_capture:
                 return
 
             if overlay.is_visible:
                 overlay.request_hide()
 
-            threading.Thread(target=handle_request, daemon=True).start()
+            overlay.request_capture()
     except AttributeError:
         pass
 
@@ -89,7 +78,7 @@ def on_quit(icon, item):
 
 def main():
     global overlay
-    overlay = Overlay()
+    overlay = Overlay(capture_callback=handle_request)
 
     tray = SystemTray(on_quit)
     tray_thread = threading.Thread(target=tray.run, daemon=True)
