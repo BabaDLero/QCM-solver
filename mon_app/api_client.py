@@ -83,7 +83,12 @@ def ask_deepseek(img):
         )
         response.raise_for_status()
         result = response.json()
-        return result.get("choices", [{}])[0].get("message", {}).get("content", str(result))
+        logger.debug(f"API raw response: {response.text[:500]}")
+        content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+        if not content:
+            logger.warning(f"Empty content in API response. Full result: {result}")
+            return f"Reponse API vide. Resultat brut: {str(result)[:200]}"
+        return content
     except requests.exceptions.Timeout:
         logger.error("API timeout")
         return "Erreur : délai d'attente dépassé"

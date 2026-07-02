@@ -34,7 +34,9 @@ def handle_request():
         img = screen_capture.grab_screenshot()
         logger.debug("Screenshot captured")
         response = api_client.ask_deepseek(img)
-        logger.debug(f"API response: {response[:80] if response else 'EMPTY'}")
+        logger.debug(f"API response: {repr(response)[:120]}")
+        if not response or not response.strip():
+            response = "Aucune reponse de l'API"
         overlay.show_text(response)
         logger.debug("Response displayed")
     except Exception as e:
@@ -67,10 +69,10 @@ def on_press(key):
                 return
 
             if overlay.is_visible:
-                logger.debug("* overlay visible → request_hide")
+                logger.debug("* overlay visible -> request_hide")
                 overlay.request_hide()
 
-            logger.debug("* trigger accepted → request_capture")
+            logger.debug("* trigger accepted -> request_capture")
             overlay.request_capture()
     except AttributeError:
         pass
